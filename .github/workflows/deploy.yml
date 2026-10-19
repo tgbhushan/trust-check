@@ -37,10 +37,8 @@ jobs:
 
       - name: Build Production Client
         env:
-          VITE_API_URL: https://trust-check-hrw9.onrender.com
+          VITE_API_URL: https://trust-check-wwx6.onrender.com
         run: npm run build
-        env:
-          VITE_API_URL: https://trust-check-hrw9.onrender.com
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
