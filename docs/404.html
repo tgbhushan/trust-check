@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TRUST//CHECK — Multi-Source Threat Intelligence</title>
+    <script>
+      // Single Page Application redirect for GitHub Pages
+      (function() {
+        var path = window.location.pathname;
+        var hostname = window.location.hostname;
+        var search = window.location.search || '';
+        var hash = window.location.hash || '';
+        
+        var isGitHubPages = hostname.indexOf('github.io') !== -1;
+        var segments = path.split('/').filter(Boolean);
+        var repo = (isGitHubPages && segments.length > 0) ? segments[0] : '';
+        var targetBase = repo ? '/' + repo + '/' : '/';
+
+        if (path.indexOf('/owner') !== -1) {
+          window.location.replace(targetBase + search + '#owner');
+        } else {
+          window.location.replace(targetBase + search + hash);
+        }
+      })();
+    </script>
+  </head>
+  <body style="background-color: #F5F2EA; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+    <p style="color: #697386; font-size: 14px;">Redirecting to TRUST//CHECK...</p>
+  </body>
+</html>
