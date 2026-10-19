@@ -603,6 +603,7 @@ function buildMultiProviderReport(params: {
   providerAvailability: ProviderAvailability;
   warnings?: string[];
 }): UnifiedReport {
+  const { indicator, indicatorType, dnsEvidence, safeBrowsingEvidence, providerAvailability } = params;
   const engines: EngineResult[] = [];
   if (safeBrowsingEvidence && safeBrowsingEvidence.configured) {
     engines.push({

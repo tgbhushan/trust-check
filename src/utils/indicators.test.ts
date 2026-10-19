@@ -17,6 +17,9 @@ import {
   extractHostname,
   queryGoogleDnsOverHttps,
   queryGoogleSafeBrowsing,
+  evaluateMultiProviderVerdict,
+  areIndicatorsEquivalent,
+  validateReportTarget,
 } from './indicators.ts';
 
 test('getVirusTotalUrlId generates URL-safe unpadded base64 identifier', () => {
@@ -139,4 +142,134 @@ test('queryGoogleSafeBrowsing handles unconfigured and placeholder keys honestly
   assert.equal(placeholder.status, 'not_configured');
   assert.equal(placeholder.configured, false);
 });
+
+test('one detection among many clean results yields conflicting verdict rather than definitive malware', () => {
+  // Scenario: 1 vendor (Fortra) flags phishing on https://google.com/, while 92 engines do not flag
+  const singleDetectionCategory = calculateAssessmentCategory({
+    malicious: 1,
+    suspicious: 0,
+    harmless: 70,
+    undetected: 22,
+  });
+  assert.equal(singleDetectionCategory, 'conflicting');
+
+  const verdict = evaluateMultiProviderVerdict({
+    stats: { malicious: 1, suspicious: 0, harmless: 70, undetected: 22 },
+    engines: [
+      { engine_name: 'Fortra', category: 'malicious', result: 'phishing', method: 'signature' },
+      { engine_name: 'Google Safebrowsing', category: 'harmless', result: 'clean', method: 'signature' },
+    ],
+    safeBrowsingEvidence: {
+      status: 'safe',
+      configured: true,
+      message: 'No active threat match listed.',
+    },
+  });
+
+  assert.equal(verdict.assessment, 'conflicting');
+  assert.match(verdict.assessment_summary, /Conflicting evidence: 1 security vendor flagged this URL/i);
+  assert.match(verdict.assessment_summary, /Fortra: phishing/i);
+  assert.match(verdict.assessment_summary, /should neither be treated as definitive malware nor dismissed as safe/i);
+  assert.ok(verdict.warnings.some((w) => w.includes('isolated vendor flagged')));
+});
+
+test('multiple independent detections corroborate definitive malicious assessment', () => {
+  // Multiple VT engines flag malicious
+  const multiVtCategory = calculateAssessmentCategory({
+    malicious: 3,
+    suspicious: 0,
+    harmless: 50,
+    undetected: 10,
+  });
+  assert.equal(multiVtCategory, 'malicious');
+
+  // Corroboration across independent providers (1 VT vendor + Google Safe Browsing)
+  const crossProviderVerdict = evaluateMultiProviderVerdict({
+    stats: { malicious: 1, suspicious: 0, harmless: 60, undetected: 10 },
+    engines: [
+      { engine_name: 'AlphaEngine', category: 'malicious', result: 'trojan', method: 'signature' },
+    ],
+    safeBrowsingEvidence: {
+      status: 'threat_found',
+      configured: true,
+      matches: [{ threatType: 'MALWARE', platformType: 'ANY' }],
+      message: 'Active threat found.',
+    },
+  });
+  assert.equal(crossProviderVerdict.assessment, 'malicious');
+  assert.match(crossProviderVerdict.assessment_summary, /Multiple independent threat intelligence providers/i);
+
+  // Purely independent multi-engine VT report
+  const multiEngineVerdict = evaluateMultiProviderVerdict({
+    stats: { malicious: 2, suspicious: 1, harmless: 40, undetected: 20 },
+    engines: [
+      { engine_name: 'VendorA', category: 'malicious', result: 'malware', method: 'signature' },
+      { engine_name: 'VendorB', category: 'malicious', result: 'phishing', method: 'signature' },
+    ],
+  });
+  assert.equal(multiEngineVerdict.assessment, 'malicious');
+  assert.match(multiEngineVerdict.assessment_summary, /Multiple independent security vendors/i);
+});
+
+test('conflicting provider results are transparently labeled and explained', () => {
+  // Google Safe Browsing flags active threat match, but 80 VT engines report zero detections
+  const conflictingVerdict = evaluateMultiProviderVerdict({
+    stats: { malicious: 0, suspicious: 0, harmless: 60, undetected: 20 },
+    safeBrowsingEvidence: {
+      status: 'threat_found',
+      configured: true,
+      matches: [{ threatType: 'SOCIAL_ENGINEERING', platformType: 'ANY' }],
+      message: 'Google Safe Browsing threat match.',
+    },
+  });
+
+  assert.equal(conflictingVerdict.assessment, 'conflicting');
+  assert.match(conflictingVerdict.assessment_summary, /Conflicting provider evidence/i);
+  assert.match(conflictingVerdict.assessment_summary, /SOCIAL_ENGINEERING/i);
+  assert.match(conflictingVerdict.assessment_summary, /80 VirusTotal engines reported no detections/i);
+  assert.ok(conflictingVerdict.warnings.some((w) => w.includes('Google Safe Browsing flagged active threat')));
+});
+
+test('Google Safe Browsing and DNS results remain strictly independent', () => {
+  // Domain NXDOMAIN does not overwrite clean Safe Browsing or vice-versa
+  const independentVerdict = evaluateMultiProviderVerdict({
+    stats: { malicious: 0, suspicious: 0, harmless: 0, undetected: 0 },
+    safeBrowsingEvidence: {
+      status: 'safe',
+      configured: true,
+      message: 'No threat listed in Safe Browsing.',
+    },
+    dnsEvidence: {
+      status: 'nxdomain',
+      domain: 'does-not-exist.example',
+      statusCode: 3,
+      message: 'Domain not found in authoritative DNS (NXDOMAIN)',
+    },
+  });
+
+  // NXDOMAIN flags anomaly without falsely fabricating a malicious blacklist hit
+  assert.equal(independentVerdict.assessment, 'suspicious');
+  assert.ok(independentVerdict.warnings.some((w) => w.includes('NXDOMAIN')));
+});
+
+test('stale-result prevention validates matching target indicators and rejects cross-query pollution', () => {
+  // URL equivalence handling canonical variations
+  assert.equal(areIndicatorsEquivalent('https://google.com', 'https://google.com/', 'url'), true);
+  assert.equal(areIndicatorsEquivalent('https://GOOGLE.COM/test', 'https://google.com/test', 'url'), true);
+  assert.equal(areIndicatorsEquivalent('https://google.com/search', 'https://google.com/about', 'url'), false);
+  assert.equal(areIndicatorsEquivalent('https://google.com', 'https://phishing-google.com', 'url'), false);
+
+  // Domain equivalence
+  assert.equal(areIndicatorsEquivalent('google.com', 'https://google.com/', 'domain'), true);
+  assert.equal(areIndicatorsEquivalent('example.com', 'example.org', 'domain'), false);
+
+  // Validate report target freshness
+  const matchResult = validateReportTarget('https://google.com', 'https://google.com/', 'url');
+  assert.equal(matchResult.valid, true);
+
+  const staleResult = validateReportTarget('https://google.com', 'https://malicious-scam.example/', 'url');
+  assert.equal(staleResult.valid, false);
+  assert.match(staleResult.reason || '', /Stale results blocked/i);
+});
+
 

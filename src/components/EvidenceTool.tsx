@@ -58,37 +58,6 @@ interface EvidenceToolProps {
   isLoading: boolean;
 }
 
-const PRESET_EXAMPLES: Record<IndicatorType, Array<{ label: string; value: string; desc: string }>> = {
-  url: [
-    { label: 'google.com (Clean)', value: 'https://google.com', desc: 'Known portal with existing report' },
-    { label: 'archive.org (Clean)', value: 'https://archive.org', desc: 'Non-profit digital library with existing report' },
-    { label: 'Uncataloged URL (No Report)', value: 'https://unindexed-fresh-sample.example.org/portal', desc: 'Unindexed URL with no existing record' },
-    { label: 'Token Test (Sensitive)', value: 'https://bank.example.com/reset?token=a8f9c2d1e0&auth=true', desc: 'Demonstrates sensitive indicator defense' },
-  ],
-  domain: [
-    { label: 'wikipedia.org', value: 'wikipedia.org', desc: 'High reputation knowledge archive' },
-    { label: 'crypto-airdrop.xyz', value: 'crypto-airdrop-bonus2026.example.org', desc: 'Simulated suspicious typosquatting domain' },
-    { label: 'example.com', value: 'example.com', desc: 'IANA documentation domain' },
-  ],
-  ip: [
-    { label: '1.1.1.1 (Cloudflare)', value: '1.1.1.1', desc: 'Public DNS resolver infrastructure' },
-    { label: '198.51.100.88 (Offshore C2)', value: '198.51.100.88', desc: 'Offshore bulletproof hosting gateway' },
-    { label: '192.168.1.1 (Private IP)', value: '192.168.1.1', desc: 'Private RFC 1918 test for SSRF defense' },
-  ],
-  file: [
-    {
-      label: 'Trojan.Stealer Hash',
-      value: '2c2446132bb3522f741b7c06d3b8e23807768323860f4178ab0f31e33ccfe2a8',
-      desc: 'Known InfoStealer executable SHA-256',
-    },
-    {
-      label: 'Null SHA-256',
-      value: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      desc: 'Empty file 0-byte benchmark hash',
-    },
-  ],
-};
-
 export const EvidenceTool: React.FC<EvidenceToolProps> = ({
   onInvestigateLive,
   onScanUrlLive,
@@ -464,32 +433,6 @@ export const EvidenceTool: React.FC<EvidenceToolProps> = ({
             </div>
           )}
 
-          {/* Research Samples Bar */}
-          <div className="pt-2">
-            <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#697386] block mb-2">
-              Verified Sample Indicators:
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {PRESET_EXAMPLES[indicatorType].map((ex) => (
-                <button
-                  key={ex.label}
-                  type="button"
-                  onClick={() => {
-                    setInputValue(ex.value);
-                    setValidationError(null);
-                    setSensitiveAlert(null);
-                    setServiceError(null);
-                  }}
-                  className="px-2.5 py-1 text-xs font-mono bg-[#F5F2EA] hover:bg-[#EBE7DC] border border-[#D8DCE2] rounded-md text-[#111827] transition-colors flex items-center gap-1.5 group"
-                >
-                  <span className="font-semibold">{ex.label}</span>
-                  <span className="text-[#697386] text-[10px] font-sans group-hover:text-[#111827]">
-                    ({ex.desc})
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
         </form>
       </div>
 
